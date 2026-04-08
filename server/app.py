@@ -114,5 +114,9 @@ with gr.Blocks(title="HLS AI Architect - Hardware Scheduler") as demo:
 # Mount Gradio into FastAPI (Required for uvicorn server.app:app)
 app = gr.mount_gradio_app(app, demo, path="/")
 
-if __name__ == "__main__":
+def main():
+    """ Entry point for the OpenEnv validator. """
     uvicorn.run(app, host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
