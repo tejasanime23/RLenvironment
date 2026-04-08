@@ -1,0 +1,13 @@
+gymnasium==0.28.1
+stable-baselines3==2.1.0
+sb3-contrib==2.1.0
+torch>=2.0.0
+networkx>=3.0
+matplotlib
+numpy
+scipy
+gradio
+openai
+fastapi
+uvicorn
+python-multipart

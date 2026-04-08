@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hls-ai-architect"
+version = "1.0.0"
+description = "A High-Level Synthesis (HLS) scheduling environment"
+authors = [
+  { name="Tejas Shrivastava" },
+]
+dependencies = [
+    "gymnasium",
+    "stable-baselines3",
+    "sb3-contrib",
+    "networkx",
+    "numpy",
+    "torch",
+    "matplotlib",
+    "pydantic",
+    "fastapi",
+    "uvicorn",
+    "openenv-core>=0.2.0"
+]
+
+[project.scripts]
+server = "server.app:main"

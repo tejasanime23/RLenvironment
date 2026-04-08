@@ -1,0 +1,22 @@
+name: "hls-ai-architect"
+version: "1.0.0"
+description: "A High-Level Synthesis (HLS) scheduling environment where an AI agent maps software dependencies (DAGs) to hardware silicon, managing resources, latency, and area limits using compiler pragmas."
+
+observation_schema: "openenv_wrapper.HLSObservation"
+action_schema: "openenv_wrapper.HLSAction"
+
+tasks:
+  - id: "task_1_topology"
+    description: "Unconstrained scheduling. The agent must find the mathematical critical path of the graph with infinite hardware resources."
+    difficulty: "easy"
+    grader: "server.graders:grade_task_1"
+  
+  - id: "task_2_constrained"
+    description: "Resource-constrained scheduling. The agent must schedule operations within strict hardware limits (2 ALU, 1 MEM), dealing with the Von Neumann bottleneck."
+    difficulty: "medium"
+    grader: "server.graders:grade_task_2"
+
+  - id: "task_3_architect"
+    description: "Hardware Transformation. The agent uses Pragmas (UNROLL, PIPELINE, ARRAY_PARTITION) to physically alter the graph and memory controllers to maximize speed without exceeding a strict Area budget."
+    difficulty: "hard"
+    grader: "server.graders:grade_task_3"
