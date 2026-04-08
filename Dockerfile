@@ -4,7 +4,7 @@ FROM python:3.10-slim
 # Install system dependencies for Matplotlib and Graph processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
