@@ -65,6 +65,87 @@ def get_state():
         raise HTTPException(status_code=400, detail="Environment must be reset first. Call /reset.")
     return format_obs(current_obs, current_info)
 
+def run_inference(code):
+    # 1. Hot-swap the UI kernel
+    try:
+        env.unwrapped.set_kernel(code)
+    except Exception as e:
+        return f"Error: {e}", None
+        
+    # Hardcode seed for chart determinism (User requirement)
+    obs, info = env.reset(seed=42)
+    done = False
+    
+    while not done:
+        if model:
+            # Model inference
+            action, _ = model.predict(obs, action_masks=env.unwrapped.action_masks(), deterministic=True)
+        else:
+            # Fallback to current legal schedule if model not yet trained
+            action = np.where(env.unwrapped.action_masks() == 1)[0][0]
+        
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+    
+    # 2. Generate visualization
+    from run_all_tasks import plot_multi_gantt_chart
+    img_path = "/tmp/gantt_temp.png"
+    
+    try:
+        plot_multi_gantt_chart(
+            env.unwrapped.execution_history, 
+            env, 
+            filename=img_path, 
+            title_str="User Kernel Schedule"
+        )
+    except Exception as e:
+        return f"Plotting Error: {e}", None
+        
+    return info.get("status", "Schedule Complete"), img_path
+
+def run_compliance_check():
+    """ Runs the 3 official tasks and returns results for the UI table. """
+    results = []
+    tasks = [
+        ("Task 1: Topology", {"max_alu": 999, "max_mac": 999, "max_mem": 999}, grade_task_1, "benchmarks/gauntlet_vector_add.py"),
+        ("Task 2: Constrained", {"max_alu": 2, "max_mac": 1, "max_mem": 1}, grade_task_2, "benchmarks/gauntlet_fft_butterfly.py"),
+        ("Task 3: Architect", {"max_alu": 2, "max_mac": 1, "max_mem": 1}, grade_task_3, "benchmarks/gauntlet_sobel_stencil.py")
+    ]
+    
+    for name, params, grader, bench_path in tasks:
+        try:
+            # Setup temp env for this task check
+            from gauntlet_trainer import make_gauntlet_env
+            t_env = make_gauntlet_env(**params)
+            if os.path.exists(bench_path):
+                with open(bench_path, "r") as f:
+                    source = f.read()
+                t_env.unwrapped.set_kernel(source)
+            
+            # Check phase requirements
+            phase = "SCHEDULE" if "Architect" not in name else "TRANSFORM"
+            obs, info = t_env.reset(seed=42, options={"initial_phase": phase})
+            
+            done = False
+            while not done:
+                if model:
+                    action, _ = model.predict(obs, action_masks=t_env.unwrapped.action_masks(), deterministic=True)
+                else:
+                    action = np.where(t_env.unwrapped.action_masks() == 1)[0][0]
+                obs, reward, term, trunc, info = t_env.step(action)
+                done = term or trunc
+            
+            # Grade
+            from run_all_tasks import extract_global_state
+            score = grader(extract_global_state(obs, info))
+            status = "✅ PASS" if score >= 0.7 else "❌ FAIL"
+            results.append([name, f"{score*100:.2f}%", status])
+            
+        except Exception as e:
+            results.append([name, "0.00%", f"ERROR: {str(e)[:15]}..."])
+            
+    return results
+
 # --- Gradio UI "The Judge Magnet" ---
 with gr.Blocks(title="HLS AI Architect - Hardware Scheduler", theme=gr.themes.Soft(primary_hue="indigo", secondary_hue="slate")) as demo:
     gr.Markdown("# 🚀 HLS AI Architect\n### Universal Hardware Scheduler (Nemotron-Ready)")
