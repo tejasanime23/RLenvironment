@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gradio as gr
 from gauntlet_trainer import make_gauntlet_env
 from openenv_wrapper import HLSObservation, HLSAction
-from graders import grade_task_1, grade_task_2, grade_task_3, clamp_score
+from server.graders import grade_task_1, grade_task_2, grade_task_3, clamp_score
 
 app = FastAPI(title="HLS AI Architect OpenEnv API")
 
