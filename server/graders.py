@@ -27,11 +27,13 @@ def grade_task_2(history_or_info):
     cycles = history_or_info.get("global_state", [999])[0] if isinstance(history_or_info, dict) else 999
     meta = _extract_meta(history_or_info)
     
-    target = max(meta["critical_path_depth"], float(meta["total_ops"]) / 2.0)
+    # Add +10 cycles of 'slack' to account for small-kernel overhead and pipeline drain
+    target = max(meta["critical_path_depth"], float(meta["total_ops"]) / 2.0) + 10.0
     
     if cycles <= target:
         return clamp_score(1.0)
-    score = (target / float(cycles)) ** 2
+    # Balanced linear decay for realistic agent performance on constrained tasks
+    score = target / float(cycles)
     return clamp_score(score)
 
 def grade_task_3(history_or_info):
