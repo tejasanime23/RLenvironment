@@ -62,17 +62,29 @@ def build_user_prompt(obs, status_str, history: List[str]) -> str:
         """
     ).strip()
 
+def clamp_score(score):
+    """
+    Ensures scores stay strictly within (0, 1) for platform compliance.
+    """
+    try:
+        f_score = float(score)
+        return max(0.0001, min(0.9999, f_score))
+    except (ValueError, TypeError):
+        return 0.0001
+
 # --- STDOUT Logging (Required for Hackathon Grading) ---
 def log_start(task: str, env: str, model: str) -> None:
+    # Use exact key=value format without internal spaces for regex safety
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_val = error if error else "null"
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(task: str, success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    # Using 4 decimal places for score as requested
+    print(f"[END] task={task} success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}", flush=True)
 
 class OpenEnvStringWrapper(gym.Wrapper):
     """
@@ -122,61 +134,66 @@ async def eval_loop():
         max_mem=RESOURCES["MEM"]
     )
     env = OpenEnvStringWrapper(raw_env)
-    
-    history: List[str] = []
-    rewards: List[float] = []
-    steps_taken = 0
-    final_score = 0.0
-    success = False
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    # Always loop through all tasks to ensure the "3 Task Minimum" requirement is met 
+    # in a single session as required by the automated grader.
+    tasks_to_run = list(TASK_MAPPING.keys())
 
-    try:
-        # Step into scheduled mode immediately for evaluation
-        obs, info = env.reset(kernel_name=TASK_NAME)
-        status_str = info.get("status", "System initialized.")
-        
-        for step in range(1, MAX_STEPS + 1):
-            if client:
-                prompt = build_user_prompt(obs, status_str, history)
-                completion = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.1,
-                    max_tokens=20
-                )
-                action_str = (completion.choices[0].message.content or "WAIT").strip()
-            else:
-                action_str = "WAIT" # Fallback for local testing without API key
+    for task_id in tasks_to_run:
+        internal_name = TASK_MAPPING.get(task_id, task_id)
+        history: List[str] = []
+        rewards: List[float] = []
+        steps_taken = 0
+        final_score = 0.0
+        success = False
 
-            # Step the environment
-            obs, reward, done, info = env.step(action_str)
+        log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
+
+        try:
+            # Step into scheduled mode immediately for evaluation
+            obs, info = env.reset(kernel_name=internal_name)
+            status_str = info.get("status", "System initialized.")
             
-            status_str = info.get("status", "No status updates.")
-            error = info.get("synthesis_error", None) # Matches our hardened hls_env.py
-            rewards.append(reward)
-            steps_taken = step
-            
-            log_step(step, action_str, reward, done, error)
-            history.append(f"Cycle {step}: {action_str} -> {status_str}")
+            for step in range(1, MAX_STEPS + 1):
+                if client:
+                    prompt = build_user_prompt(obs, status_str, history)
+                    completion = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.1,
+                        max_tokens=20
+                    )
+                    action_str = (completion.choices[0].message.content or "WAIT").strip()
+                else:
+                    action_str = "WAIT"
 
-            if done:
-                break
+                obs, reward, done, info = env.step(action_str)
+                
+                status_str = info.get("status", "No status updates.")
+                error = info.get("synthesis_error", None)
+                rewards.append(reward)
+                steps_taken = step
+                
+                log_step(step, action_str, reward, done, error)
+                history.append(f"Cycle {step}: {action_str} -> {status_str}")
 
-        # Calculate final score (normalized based on critical path depth)
-        meta = info.get("metadata", {})
-        cp = meta.get("critical_path_depth", 1)
-        # Simple score based on makespan vs critical path
-        final_score = max(0.0, min(1.0, cp / max(1, info["hls_state"].current_cycle)))
-        success = final_score >= 0.7 
+                if done:
+                    break
 
-    except Exception as e:
-        print(f"[ERROR] Inference crashed: {e}")
-    finally:
-        log_end(success, steps_taken, final_score, rewards)
+            # Calculate final score (normalized based on critical path depth)
+            meta = info.get("metadata", {})
+            cp = meta.get("critical_path_depth", 1)
+            raw_score = cp / max(1, info["hls_state"].current_cycle)
+            final_score = clamp_score(raw_score)
+            success = final_score >= 0.7 
+
+        except Exception as e:
+            print(f"[ERROR] Task {task_id} failed: {e}")
+        finally:
+            log_end(task_id, success, steps_taken, final_score, rewards)
 
 if __name__ == "__main__":
     asyncio.run(eval_loop())

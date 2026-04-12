@@ -12,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gradio as gr
 from gauntlet_trainer import make_gauntlet_env
 from openenv_wrapper import HLSObservation, HLSAction
+from graders import grade_task_1, grade_task_2, grade_task_3, clamp_score
 
 app = FastAPI(title="HLS AI Architect OpenEnv API")
 
@@ -65,51 +66,38 @@ def get_state():
     return format_obs(current_obs, current_info)
 
 # --- Gradio UI "The Judge Magnet" ---
-with gr.Blocks(title="HLS AI Architect - Hardware Scheduler") as demo:
+with gr.Blocks(title="HLS AI Architect - Hardware Scheduler", theme=gr.themes.Soft(primary_hue="indigo", secondary_hue="slate")) as demo:
     gr.Markdown("# 🚀 HLS AI Architect\n### Universal Hardware Scheduler (Nemotron-Ready)")
     
-    with gr.Row():
-        with gr.Column(scale=1):
-            code_input = gr.Code(label="Python Hardware Kernel", language="python", value="def kernel(A, B, C):\n    for i in range(4):\n        C[i] = A[i] + B[i]")
-            run_btn = gr.Button("Schedule Kernel", variant="primary")
-        
-        with gr.Column(scale=2):
-            status_box = gr.Textbox(label="Agent Reasoning (status_string)")
-            gantt_plot = gr.Image(label="Architecture Schedule (Gantt Chart)")
-    
-    def run_inference(code):
-        # 1. Hot-swap the UI kernel
-        try:
-            env.unwrapped.set_kernel(code)
-        except Exception as e:
-            return f"Error: {e}", None
+    with gr.Tabs():
+        with gr.Tab("Interactive Scheduler"):
+            gr.Markdown("### 🛠️ Hardware Kernel Profiler\nUpload code and view the agent's cycle-by-cycle scheduling decisions.")
+            with gr.Row():
+                with gr.Column(scale=1):
+                    code_input = gr.Code(label="Python Hardware Kernel", language="python", 
+                                        value="def kernel(A, B, C):\n    for i in range(4):\n        C[i] = A[i] + B[i]")
+                    run_btn = gr.Button("⚡ Schedule Kernel", variant="primary")
+                
+                with gr.Column(scale=2):
+                    status_box = gr.Textbox(label="Agent Reasoning (status_string)")
+                    gantt_plot = gr.Image(label="Architecture Schedule (Gantt Chart)")
             
-        obs, info = env.reset()
-        done = False
-        
-        while not done:
-            if model:
-                # Model inference
-                action, _ = model.predict(obs, action_masks=env.unwrapped.action_masks(), deterministic=True)
-            else:
-                # Fallback to current legal schedule if model not yet trained
-                action = np.where(env.unwrapped.action_masks() == 1)[0][0]
-            
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-        
-        # 2. Generate visualization (reuse run_all_tasks logic or similar)
-        from run_all_tasks import generate_gantt_plot
-        fig = generate_gantt_plot(env.unwrapped.execution_history, "User_Submission")
-        # Save fig to a temp buffer and return
-        import matplotlib.pyplot as plt
-        img_path = "/tmp/gantt_temp.png"
-        fig.savefig(img_path)
-        plt.close(fig)
-        
-        return info.get("status", "Schedule Complete"), img_path
+            run_btn.click(run_inference, inputs=[code_input], outputs=[status_box, gantt_plot])
 
-    run_btn.click(run_inference, inputs=[code_input], outputs=[status_box, gantt_plot])
+        with gr.Tab("Compliance Audit"):
+            gr.Markdown("## 📉 OpenEnv Gauntlet Scorecard\nRun the official 3-task validation stress-test for your current agent to verify hackathon compliance.")
+            audit_btn = gr.Button("🔍 Run Full Compliance Audit", variant="secondary")
+            audit_table = gr.Dataframe(
+                headers=["Task ID", "Grader Score", "Status"],
+                datatype=["str", "str", "str"],
+                col_count=(3, "fixed"),
+                label="Compliance Report"
+            )
+            
+            audit_btn.click(run_compliance_check, outputs=audit_table)
+
+    gr.Markdown("---")
+    gr.Markdown("Built for the **Meta x Scaler OpenEnv Hackathon**. Agent: nvidia/nemotron-3-8b-super | Env: ultimate_gauntlet_v1")
 
 # Mount Gradio into FastAPI (Required for uvicorn server.app:app)
 app = gr.mount_gradio_app(app, demo, path="/")

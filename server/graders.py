@@ -1,3 +1,14 @@
+def clamp_score(score):
+    """
+    Ensures scores stay strictly within (0, 1) to satisfy platform rules.
+    1.0 becomes 0.9999, 0.0 becomes 0.0001.
+    """
+    try:
+        f_score = float(score)
+        return max(0.0001, min(0.9999, f_score))
+    except (ValueError, TypeError):
+        return 0.0001 # Default fallback for invalid data
+
 def _extract_meta(history_or_info):
     if isinstance(history_or_info, dict):
         return history_or_info.get("metadata", {"critical_path_depth": 18, "total_ops": 177, "max_area": 1000.0})
@@ -9,7 +20,7 @@ def grade_task_1(history_or_info):
     target = _extract_meta(history_or_info)["critical_path_depth"]
     
     score = 1.0 - (max(0, cycles - target) * 0.05)
-    return float(max(0.0, min(1.0, round(score, 4))))
+    return clamp_score(score)
 
 def grade_task_2(history_or_info):
     """ Task 2: Strict Hardware Bounds. Asymptotic Decay targeting Bottleneck threshold """
@@ -19,9 +30,9 @@ def grade_task_2(history_or_info):
     target = max(meta["critical_path_depth"], float(meta["total_ops"]) / 2.0)
     
     if cycles <= target:
-        return 1.0
+        return clamp_score(1.0)
     score = (target / float(cycles)) ** 2
-    return float(max(0.0, min(1.0, round(score, 4))))
+    return clamp_score(score)
 
 def grade_task_3(history_or_info):
     """ Task 3: Pragma Scaling. Accelerated Speed multiplied by Area Efficiency """
@@ -39,4 +50,4 @@ def grade_task_3(history_or_info):
         
     area_efficiency = 1.2 - (0.2 * float(area_ratio))
     score = speed_score * area_efficiency
-    return float(max(0.0, min(1.0, round(score, 4))))
+    return clamp_score(score)
